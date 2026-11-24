@@ -363,4 +363,35 @@ if tarik_data or ("html_laporan" in st.session_state):
     margin: 0 auto;
   }}
   .kode-text {{
-    font-family: "Courier
+    font-family: "Courier New", Courier, monospace;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #444444;
+    margin-top: 4px;
+  }}
+</style>
+</head>
+<body>
+  <div class="header-box">
+    <div class="title">Daftar Nomor BON</div>
+    <div class="subtitle">Tgl: {meta_date} | NIK: {meta_nik}</div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>No</th>
+        <th>No.Bon</th>
+        <th>Tx</th>
+        <th>QTY</th>
+        <th>Lbl Price</th>
+        <th>Barcode View</th>
+      </tr>
+    </thead>
+    <tbody>{baris_html}</tbody>
+  </table>
+</body>
+</html>"""
+
+  tinggi_tampilan = 130 + (jumlah_tampil * 84)
+  components.html(halaman_html, height=tinggi_tampilan, scrolling=False)
