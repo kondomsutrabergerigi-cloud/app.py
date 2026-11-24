@@ -39,14 +39,12 @@ MAP_SANDI = {
 
 
 def konversi_kode_bon(no_bon: str) -> str:
-  """Mengambil 4 karakter/angka terakhir no bon dan mengonversi angka ke huruf."""
   empat_terakhir = str(no_bon).strip()[-4:].upper()
   return "".join(MAP_SANDI.get(karakter, karakter) for karakter in empat_terakhir)
 
 
 @st.cache_data(show_spinner=False)
 def buat_barcode_base64(kode_sandi: str) -> str:
-  """Menghasilkan gambar barcode Code 128 dalam format Base64 PNG."""
   code128 = barcode.get("code128", kode_sandi, writer=ImageWriter())
   opsi_writer = {
       "module_width": 0.42,
@@ -61,7 +59,6 @@ def buat_barcode_base64(kode_sandi: str) -> str:
 
 @st.cache_data(ttl=120, show_spinner=False)
 def ambil_data_penjualan(store_id: str, date_tx: str, user_id: str) -> dict | list:
-  """Menarik data laporan penjualan per nomor bon dari server."""
   params = {
       "storeId": store_id,
       "dateTx": date_tx,
@@ -72,18 +69,34 @@ def ambil_data_penjualan(store_id: str, date_tx: str, user_id: str) -> dict | li
           "Mozilla/5.0 (Linux; Android 11; Mobile) AppleWebKit/537.36 "
           "(KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
       ),
-      "Accept": "application/json, text/plain, */*",
+      "Accept": "application/json, text/plain, text/html, */*",
       "App-Name": "CEXP-CLOUD",
       "Platform": "ANDROID",
       "x-api-key": API_KEY,
       "Api-Key": API_KEY,
   }
-  response = requests.get(BASE_URL, params=params, headers=headers, timeout=15)
-  response.raise_for_status()
-  return response.json()
+  response = requests.get(BASE_URL, params=params, headers=headers, timeout=20)
+  teks = response.text.strip()
+
+  if not teks:
+    return {
+        "_diagnostik": "RESPONS_KOSONG",
+        "status_code": response.status_code,
+        "url": response.url,
+        "headers": dict(response.headers),
+    }
+
+  try:
+    return response.json()
+  except ValueError:
+    return {
+        "_diagnostik": "BUKAN_JSON",
+        "status_code": response.status_code,
+        "url": response.url,
+        "raw_body": teks[:1500],
+    }
 
 
-# --- Form Input Parameter ---
 st.markdown("### 🧾 Reprint Nota & Barcode BON")
 
 col1, col2, col3 = st.columns([1, 1.2, 1.2])
@@ -116,17 +129,28 @@ if tarik_data or ("hasil_api" in st.session_state):
             store_id, date_tx, user_id
         )
         st.session_state["meta"] = (store_id, date_tx, user_id)
-      except requests.exceptions.HTTPError as err:
-        st.error(f"HTTP Error {err.response.status_code}: {err.response.text}")
-        st.stop()
       except requests.exceptions.RequestException as err:
-        st.error(f"Gagal terhubung ke server: {err}")
+        st.error(f"Koneksi gagal: {err}")
         st.stop()
 
   hasil = st.session_state["hasil_api"]
   meta_store, meta_date, meta_nik = st.session_state["meta"]
 
-  # Ekstrak list transaksi dari respons JSON
+  # Cek jika server mengembalikan respons kosong atau non-JSON
+  if isinstance(hasil, dict) and "_diagnostik" in hasil:
+    st.error(
+        f"Server membalas tanpa data JSON (Status HTTP: {hasil['status_code']})."
+    )
+    st.info(
+        "Jika Status HTTP 200/403 tetapi isi kosong saat dijalankan di"
+        " Streamlit Cloud, IP luar negeri Streamlit diblokir oleh firewall"
+        " server. Jalankan skrip ini secara lokal di Termux HP Anda"
+        " menggunakan jaringan Indonesia."
+    )
+    with st.expander("Detail Diagnostik Server"):
+      st.json(hasil)
+    st.stop()
+
   daftar_transaksi = []
   if isinstance(hasil, list):
     daftar_transaksi = hasil
@@ -142,7 +166,6 @@ if tarik_data or ("hasil_api" in st.session_state):
       st.json(hasil)
     st.stop()
 
-  # Filter pencarian cepat nomor bon / kode sandi
   filter_bon = st.text_input(
       "Cari No. Bon / Kode Sandi (opsional)",
       placeholder="Ketik 4 digit bon (misal: 3580) atau huruf (misal: DUIM)...",
@@ -203,7 +226,6 @@ if tarik_data or ("hasil_api" in st.session_state):
         </tr>
         """
 
-  # Latar putih dipaksa (!important) agar barcode tetap terbaca scanner walau HP mode gelap
   tabel_html = f"""
     <style>
         .bon-wrapper {{
@@ -294,5 +316,5 @@ if tarik_data or ("hasil_api" in st.session_state):
 
   st.markdown(tabel_html, unsafe_allow_html=True)
 
-  with st.expander("Cek Struktur JSON Asli (Jika ada kolom yang masih '-')"):
+  with st.expander("Cek Struktur JSON Asli"):
     st.json(daftar_transaksi[0])
